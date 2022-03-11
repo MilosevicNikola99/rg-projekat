@@ -11,7 +11,4 @@ Prazan projekat sa pratećim bibliotekama koje koristimo na času.
 7. ALT+SHIFT+F10 -> project_base -> run
 <<<<<<< HEAD
 8. PROmena2
-=======
 
-promena
->>>>>>> 80c7e5c81eed65274a9bdb21a0f6bd73a0c7b635
