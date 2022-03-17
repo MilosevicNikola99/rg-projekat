@@ -1,0 +1,70 @@
+newmtl Base_Mesh_sculpt_2:MeshSG
+illum 4
+Kd 0.50 0.50 0.50
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.00
+map_Ka eb_lamp_01_c.tga
+map_Kd eb_lamp_01_c.tga
+map_Bump eb_lamp_01_n.tga
+
+newmtl blinn1SG
+illum 4
+Kd 0.00 0.00 0.00
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+map_Ka eb_lamp_01_g.tga
+map_Kd eb_lamp_01_c.tga
+map_Bump eb_lamp_01_n.tga
+
+Ni 1.00
+Ks 0.50 0.50 0.50
+newmtl blinn2SG
+illum 4
+Kd 0.50 0.50 0.50
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.00
+Ks 0.50 0.50 0.50
+newmtl blinn3SG
+illum 4
+Kd 0.50 0.50 0.50
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.00
+Ks 0.50 0.50 0.50
+map_Kd eb_lamp_01_c.tga
+map_Bump eb_lamp_01_n.tga
+map_Ka eb_lamp_01_c.tga
+
+newmtl blinn4SG
+illum 4
+Kd 0.50 0.50 0.50
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.00
+Ks 0.50 0.50 0.50
+map_Ka eb_lamp_01_c.tga
+map_Kd eb_lamp_01_c.tga
+map_Bump eb_lamp_01_n.tga
+
+newmtl blinn5SG
+illum 4
+Kd 0.50 0.50 0.50
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.00
+Ks 0.50 0.50 0.50
+map_Kd eb_lamp_01_c.tga
+map_Bump eb_lamp_01_n.tga
+map_Ka eb_lamp_01_c.tga
+
+newmtl initialShadingGroup
+illum 4
+Kd 0.50 0.50 0.50
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.00
+map_Kd eb_lamp_01_c.tga
+map_Bump eb_lamp_01_n.tga
+map_Ka eb_lamp_01_g.tga
