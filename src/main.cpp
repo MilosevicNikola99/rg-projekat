@@ -57,7 +57,7 @@ struct ProgramState {
     Camera camera;
     bool CameraMouseMovementUpdateEnabled = true;
     glm::vec3 backpackPosition = glm::vec3(0.0f);
-    float backpackScale = 3.0f;
+    float backpackScale = 1.0f;
     PointLight pointLight;
     ProgramState()
             : camera(glm::vec3(0.0f, 0.0f, 3.0f)) {}
@@ -165,8 +165,10 @@ int main() {
 
     // load models
     // -----------
-    Model ourModel("resources/objects/obj/LibertyStatue/LibertStatue.obj");
+    Model ourModel("resources/objects/LibertyStatue/LibertStatue.obj");
+    //Model ourModel("resources/objects/backpack/backpack.obj");
     ourModel.SetShaderTextureNamePrefix("material.");
+    //model2.SetShaderTextureNamePrefix("material.");
 
     PointLight& pointLight = programState->pointLight;
     pointLight.position = glm::vec3(4.0f, 4.0, 0.0);
@@ -225,7 +227,15 @@ int main() {
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model,
                                programState->backpackPosition); // translate it down so it's at the center of the scene
-        model = glm::scale(model, glm::vec3(programState->backpackScale));    // it's a bit too big for our scene, so scale it down
+        model = glm::scale(model, glm::vec3(programState->backpackScale));// it's a bit too big for our scene, so scale it down
+
+
+        //proba kretanja modela po sceni
+         //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
+
+        //dodata rotacija oko Oy
+        model = glm::rotate(model, glm::radians(currentFrame*10.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
+
         ourShader.setMat4("model", model);
         ourModel.Draw(ourShader);
 
