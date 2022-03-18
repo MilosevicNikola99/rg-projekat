@@ -162,13 +162,13 @@ int main() {
     // build and compile shaders
     // -------------------------
     Shader ourShader("resources/shaders/2.model_lighting.vs", "resources/shaders/2.model_lighting.fs");
-
+    Shader tmpShader("resources/shaders/tmp.vs", "resources/shaders/tmp.fs");
     // load models
     // -----------
     Model ourModel("resources/objects/LibertyStatue/LibertStatue.obj");
-    //Model ourModel("resources/objects/backpack/backpack.obj");
+    Model modelTmp("resources/objects/Wood Table with glasplatte/Wood_Table.obj");
     ourModel.SetShaderTextureNamePrefix("material.");
-    //model2.SetShaderTextureNamePrefix("material.");
+    modelTmp.SetShaderTextureNamePrefix("material.");
 
     PointLight& pointLight = programState->pointLight;
     pointLight.position = glm::vec3(4.0f, 4.0, 0.0);
@@ -223,26 +223,59 @@ int main() {
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
 
+
         // render the loaded model
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model,
                                programState->backpackPosition); // translate it down so it's at the center of the scene
         model = glm::scale(model, glm::vec3(programState->backpackScale));// it's a bit too big for our scene, so scale it down
 
-
         //proba kretanja modela po sceni
          //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
 
         //dodata rotacija oko Oy
-        model = glm::rotate(model, glm::radians(currentFrame*10.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
+        model = glm::rotate(model, glm::radians(currentFrame*50.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
 
         ourShader.setMat4("model", model);
         ourModel.Draw(ourShader);
 
+
+        tmpShader.use();
+        pointLight.position = glm::vec3(1.0f * cos(currentFrame), 3.0f, 1.0 * sin(currentFrame));
+        tmpShader.setVec3("pointLight.position", pointLight.position);
+        tmpShader.setVec3("pointLight.ambient", pointLight.ambient);
+        tmpShader.setVec3("pointLight.diffuse", pointLight.diffuse);
+        tmpShader.setVec3("pointLight.specular", pointLight.specular);
+        tmpShader.setFloat("pointLight.constant", pointLight.constant);
+        tmpShader.setFloat("pointLight.linear", pointLight.linear);
+        tmpShader.setFloat("pointLight.quadratic", pointLight.quadratic);
+        tmpShader.setVec3("viewPosition", programState->camera.Position);
+        tmpShader.setFloat("material.shininess", 256.0f);
+        // view/projection transformations
+        glm::mat4 projectiontmp = glm::perspective(glm::radians(45.0f),
+                                                (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 viewtmp = programState->camera.GetViewMatrix();
+        tmpShader.setMat4("projection", projectiontmp);
+        tmpShader.setMat4("view", viewtmp);
+
+
+        // render the loaded model
+        glm::mat4 modelt = glm::mat4(1.0f);
+        modelt = glm::translate(modelt,glm::vec3(1.0f)); // translate it down so it's at the center of the scene
+        modelt = glm::scale(modelt, glm::vec3(0.4f));// it's a bit too big for our scene, so scale it down
+
+        //proba kretanja modela po sceni
+        //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
+
+        //dodata rotacija oko Oy
+        //modelt = glm::rotate(modelt, glm::radians(currentFrame*2.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
+
+        tmpShader.setMat4("model", modelt);
+        modelTmp.Draw(tmpShader);
+
+
         if (programState->ImGuiEnabled)
             DrawImGui(programState);
-
-
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
