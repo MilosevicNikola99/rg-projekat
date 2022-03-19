@@ -278,7 +278,7 @@ int main() {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
-    unsigned int cubeTexture = loadTexture(FileSystem::getPath("resources/textures/container.jpg").c_str());
+
 
     vector<std::string> faces
             {
@@ -388,6 +388,23 @@ int main() {
         ourModel.Draw(ourShader);
 
 
+        tmpShader.use();
+        pointLight.position = glm::vec3(1.0f * cos(currentFrame), 3.0f, 1.0 * sin(currentFrame));
+        tmpShader.setVec3("pointLight.position", pointLight.position);
+        tmpShader.setVec3("pointLight.ambient", pointLight.ambient);
+        tmpShader.setVec3("pointLight.diffuse", pointLight.diffuse);
+        tmpShader.setVec3("pointLight.specular", pointLight.specular);
+        tmpShader.setFloat("pointLight.constant", pointLight.constant);
+        tmpShader.setFloat("pointLight.linear", pointLight.linear);
+        tmpShader.setFloat("pointLight.quadratic", pointLight.quadratic);
+        tmpShader.setVec3("viewPosition", programState->camera.Position);
+        tmpShader.setFloat("material.shininess", 256.0f);
+        // view/projection transformations
+        glm::mat4 projectiontmp = glm::perspective(glm::radians(45.0f),
+                                                (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 viewtmp = programState->camera.GetViewMatrix();
+        tmpShader.setMat4("projection", projectiontmp);
+        tmpShader.setMat4("view", viewtmp);
 
 // cubes
 
@@ -406,6 +423,8 @@ int main() {
         glBindVertexArray(0);
         glDepthFunc(GL_LESS);
 
+        //proba kretanja modela po sceni
+        //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
 
         tmpShader.use();
         pointLight.position = glm::vec3(1.0f * cos(currentFrame), 3.0f, 1.0 * sin(currentFrame));
@@ -419,9 +438,9 @@ int main() {
         tmpShader.setVec3("viewPosition", programState->camera.Position);
         tmpShader.setFloat("material.shininess", 256.0f);
         // view/projection transformations
-        glm::mat4 projectiontmp = glm::perspective(glm::radians(45.0f),
+         projectiontmp = glm::perspective(glm::radians(45.0f),
                                                 (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
-        glm::mat4 viewtmp = programState->camera.GetViewMatrix();
+        viewtmp = programState->camera.GetViewMatrix();
         tmpShader.setMat4("projection", projectiontmp);
         tmpShader.setMat4("view", viewtmp);
 
