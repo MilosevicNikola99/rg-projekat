@@ -59,8 +59,10 @@ struct ProgramState {
     bool ImGuiEnabled = false;
     Camera camera;
     bool CameraMouseMovementUpdateEnabled = true;
-    glm::vec3 backpackPosition = glm::vec3(0.0f);
-    float backpackScale = 1.0f;
+    glm::vec3 statuePosition = glm::vec3(0.0f);
+    glm::vec3 tablePosition = glm::vec3(0.0f);
+    float statueScale = 1.0f;
+    float tableScale=1.0f;
     PointLight pointLight;
     ProgramState()
             : camera(glm::vec3(0.0f, 0.0f, 3.0f)) {}
@@ -140,7 +142,7 @@ int main() {
     }
 
     // tell stb_image.h to flip loaded texture's on the y-axis (before loading model).
-   // stbi_set_flip_vertically_on_load(true);
+   //stbi_set_flip_vertically_on_load(true);
 
     programState = new ProgramState;
     programState->LoadFromFile("resources/program_state.txt");
@@ -166,52 +168,10 @@ int main() {
     // -------------------------
     Shader ourShader("resources/shaders/2.model_lighting.vs", "resources/shaders/2.model_lighting.fs");
     Shader skyboxShader("resources/shaders/skybox.vs","resources/shaders/skybox.fs");
-    Shader shader("resources/shaders/cubemaps.vs", "resources/shaders/cubemaps.fs");
 
-    float cubeVertices[] = {
-            // positions          // texture Coords
-            -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
-            0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
-            0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-            0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-            -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-            -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
+    Shader tmpShader("resources/shaders/tmp.vs", "resources/shaders/tmp.fs");
 
-            -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-            0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-            0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-            0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-            -0.5f,  0.5f,  0.5f,  0.0f, 1.0f,
-            -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
 
-            -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-            -0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-            -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-            -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-            -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-            -0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-
-            0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-            0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-            0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-            0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-            0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-            0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-
-            -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-            0.5f, -0.5f, -0.5f,  1.0f, 1.0f,
-            0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-            0.5f, -0.5f,  0.5f,  1.0f, 0.0f,
-            -0.5f, -0.5f,  0.5f,  0.0f, 0.0f,
-            -0.5f, -0.5f, -0.5f,  0.0f, 1.0f,
-
-            -0.5f,  0.5f, -0.5f,  0.0f, 1.0f,
-            0.5f,  0.5f, -0.5f,  1.0f, 1.0f,
-            0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-            0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-            -0.5f,  0.5f,  0.5f,  0.0f, 0.0f,
-            -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
-    };
 
     float skyboxVertices[] = {
             // positions
@@ -258,16 +218,7 @@ int main() {
             1.0f, -1.0f,  1.0f
     };
 
-    unsigned int cubeVAO, cubeVBO;
-    glGenVertexArrays(1, &cubeVAO);
-    glGenBuffers(1, &cubeVBO);
-    glBindVertexArray(cubeVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), &cubeVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+
 
     unsigned int skyboxVAO, skyboxVBO;
     glGenVertexArrays(1, &skyboxVAO);
@@ -290,31 +241,22 @@ int main() {
                     FileSystem::getPath("resources/textures/skyboxtexture/nz.jpg")
             };
 
-    /*vector<std::string> faces
-            {
-                    FileSystem::getPath("resources/textures/skybox/right.jpg"),
-                    FileSystem::getPath("resources/textures/skybox/left.jpg"),
-                    FileSystem::getPath("resources/textures/skybox/bottom.jpg"),
-                    FileSystem::getPath("resources/textures/skybox/top.jpg"),
-                    FileSystem::getPath("resources/textures/skybox/front.jpg"),
-                    FileSystem::getPath("resources/textures/skybox/back.jpg")
-            };*/
 
     unsigned int cubemapTexture = loadCubemap(faces);
 
-    shader.use();
-    shader.setInt("texture1", 0);
 
     skyboxShader.use();
     skyboxShader.setInt("skybox", 0);
 
-    Shader tmpShader("resources/shaders/tmp.vs", "resources/shaders/tmp.fs");
+
+
+
     // load models
     // -----------
     Model ourModel("resources/objects/LibertyStatue/LibertStatue.obj");
     Model modelTmp("resources/objects/Wood Table with glasplatte/Wood_Table.obj");
 
-    //Model ourModel("resources/objects/backpack/backpack.obj");
+
     ourModel.SetShaderTextureNamePrefix("material.");
     modelTmp.SetShaderTextureNamePrefix("material.");
 
@@ -374,8 +316,8 @@ int main() {
         // render the loaded model
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model,
-                               programState->backpackPosition); // translate it down so it's at the center of the scene
-        model = glm::scale(model, glm::vec3(programState->backpackScale));// it's a bit too big for our scene, so scale it down
+                               programState->statuePosition); // translate it down so it's at the center of the scene
+        model = glm::scale(model, glm::vec3(programState->statueScale));// it's a bit too big for our scene, so scale it down
 
 
         //proba kretanja modela po sceni
@@ -406,7 +348,19 @@ int main() {
         tmpShader.setMat4("projection", projectiontmp);
         tmpShader.setMat4("view", viewtmp);
 
-// cubes
+        // render the loaded model
+        glm::mat4 modelt = glm::mat4(1.0f);
+        modelt = glm::translate(modelt,glm::vec3(1.0f)); // translate it down so it's at the center of the scene
+        modelt = glm::scale(modelt, glm::vec3(0.4f));// it's a bit too big for our scene, so scale it down
+
+        //proba kretanja modela po sceni
+        //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
+
+        //dodata rotacija oko Oy
+        //modelt = glm::rotate(modelt, glm::radians(currentFrame*2.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
+
+        tmpShader.setMat4("model", modelt);
+        modelTmp.Draw(tmpShader);
 
 
         // draw skybox as last
@@ -423,47 +377,9 @@ int main() {
         glBindVertexArray(0);
         glDepthFunc(GL_LESS);
 
-        //proba kretanja modela po sceni
-        //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
-
-        tmpShader.use();
-        pointLight.position = glm::vec3(1.0f * cos(currentFrame), 3.0f, 1.0 * sin(currentFrame));
-        tmpShader.setVec3("pointLight.position", pointLight.position);
-        tmpShader.setVec3("pointLight.ambient", pointLight.ambient);
-        tmpShader.setVec3("pointLight.diffuse", pointLight.diffuse);
-        tmpShader.setVec3("pointLight.specular", pointLight.specular);
-        tmpShader.setFloat("pointLight.constant", pointLight.constant);
-        tmpShader.setFloat("pointLight.linear", pointLight.linear);
-        tmpShader.setFloat("pointLight.quadratic", pointLight.quadratic);
-        tmpShader.setVec3("viewPosition", programState->camera.Position);
-        tmpShader.setFloat("material.shininess", 256.0f);
-        // view/projection transformations
-         projectiontmp = glm::perspective(glm::radians(45.0f),
-                                                (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
-        viewtmp = programState->camera.GetViewMatrix();
-        tmpShader.setMat4("projection", projectiontmp);
-        tmpShader.setMat4("view", viewtmp);
-
-
-        // render the loaded model
-        glm::mat4 modelt = glm::mat4(1.0f);
-        modelt = glm::translate(modelt,glm::vec3(1.0f)); // translate it down so it's at the center of the scene
-        modelt = glm::scale(modelt, glm::vec3(0.4f));// it's a bit too big for our scene, so scale it down
-
-        //proba kretanja modela po sceni
-        //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
-
-        //dodata rotacija oko Oy
-        //modelt = glm::rotate(modelt, glm::radians(currentFrame*2.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
-
-        tmpShader.setMat4("model", modelt);
-        modelTmp.Draw(tmpShader);
-
 
         if (programState->ImGuiEnabled)
             DrawImGui(programState);
-
-
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -476,9 +392,9 @@ int main() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-    glDeleteVertexArrays(1, &cubeVAO);
+
     glDeleteVertexArrays(1, &skyboxVAO);
-    glDeleteBuffers(1, &cubeVBO);
+
     glDeleteBuffers(1, &skyboxVBO);
     // glfw: terminate, clearing all previously allocated GLFW resources.
     // ------------------------------------------------------------------
@@ -547,8 +463,8 @@ void DrawImGui(ProgramState *programState) {
         ImGui::Text("Hello text");
         ImGui::SliderFloat("Float slider", &f, 0.0, 1.0);
         ImGui::ColorEdit3("Background color", (float *) &programState->clearColor);
-        ImGui::DragFloat3("Backpack position", (float*)&programState->backpackPosition);
-        ImGui::DragFloat("Backpack scale", &programState->backpackScale, 0.05, 0.1, 4.0);
+        ImGui::DragFloat3("Statue position", (float*)&programState->statuePosition);
+        ImGui::DragFloat("Statue scale", &programState->statueScale, 0.05, 0.1, 4.0);
 
         ImGui::DragFloat("pointLight.constant", &programState->pointLight.constant, 0.05, 0.0, 1.0);
         ImGui::DragFloat("pointLight.linear", &programState->pointLight.linear, 0.05, 0.0, 1.0);
