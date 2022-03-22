@@ -26,6 +26,8 @@ void processInput(GLFWwindow *window);
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
+void set_spotLight(Shader& shader);
+
 unsigned int loadCubemap(vector<std::string> faces);
 unsigned int loadTexture(const char *path);
 
@@ -103,6 +105,8 @@ void ProgramState::LoadFromFile(std::string filename) {
 }
 
 ProgramState *programState;
+glm::vec3 lightPosition=glm::vec3(3.0f,2.5f,1.0f);
+bool spotLightActivated=false;
 
 void DrawImGui(ProgramState *programState);
 
@@ -113,6 +117,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_SAMPLES, 4);
 
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
@@ -156,21 +161,71 @@ int main() {
     (void) io;
 
 
-
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
     // configure global opengl state
     // -----------------------------
     glEnable(GL_DEPTH_TEST);
-
+    glEnable(GL_MULTISAMPLE);
     // build and compile shaders
     // -------------------------
     Shader ourShader("resources/shaders/2.model_lighting.vs", "resources/shaders/2.model_lighting.fs");
     Shader skyboxShader("resources/shaders/skybox.vs","resources/shaders/skybox.fs");
+    //Shader tmpShader("resources/shaders/tmp.vs", "resources/shaders/tmp.fs");
+    Shader lightingShader("resources/shaders/lightCube.vs","resources/shaders/lightCube.fs");
 
-    Shader tmpShader("resources/shaders/tmp.vs", "resources/shaders/tmp.fs");
+    // load models
+    // -----------
+    Model ourModel("resources/objects/LibertyStatue/LibertStatue.obj");
+    Model modelTmp("resources/objects/Wood Table with glasplatte/Wood_Table.obj");
 
+    ourModel.SetShaderTextureNamePrefix("material.");
+    modelTmp.SetShaderTextureNamePrefix("material.");
+
+    float vertices[] = {
+            -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+            0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+            0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+            0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+            -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+            -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+            -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+            0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+            0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+            0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+            -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+            -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+
+            -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+            -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+            -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+            -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+            -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+            -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+            0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+            0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+            0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+            0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+            0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+            0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+            -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+            0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+            0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+            0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+            -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+            -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+            -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+            0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+            0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+            0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+            -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+            -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    };
 
 
     float skyboxVertices[] = {
@@ -218,8 +273,6 @@ int main() {
             1.0f, -1.0f,  1.0f
     };
 
-
-
     unsigned int skyboxVAO, skyboxVBO;
     glGenVertexArrays(1, &skyboxVAO);
     glGenBuffers(1, &skyboxVBO);
@@ -229,7 +282,26 @@ int main() {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
+//Ermin
 
+    // first, configure the cube's VAO (and VBO)
+    unsigned int VBO, cubeVAO;
+    glGenVertexArrays(1, &cubeVAO);
+    glGenBuffers(1, &VBO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glBindVertexArray(cubeVAO);
+
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // normal attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+//<-Ermin
 
     vector<std::string> faces
             {
@@ -249,27 +321,15 @@ int main() {
     skyboxShader.setInt("skybox", 0);
 
 
-
-
-    // load models
-    // -----------
-    Model ourModel("resources/objects/LibertyStatue/LibertStatue.obj");
-    Model modelTmp("resources/objects/Wood Table with glasplatte/Wood_Table.obj");
-
-
-    ourModel.SetShaderTextureNamePrefix("material.");
-    modelTmp.SetShaderTextureNamePrefix("material.");
-
     PointLight& pointLight = programState->pointLight;
     pointLight.position = glm::vec3(4.0f, 4.0, 0.0);
-    pointLight.ambient = glm::vec3(0.1, 0.1, 0.1);
-    pointLight.diffuse = glm::vec3(0.6, 0.6, 0.6);
+    pointLight.ambient = glm::vec3(0.6, 0.6, 0.6);
+    pointLight.diffuse = glm::vec3(0.8, 0.8, 0.8);
     pointLight.specular = glm::vec3(1.0, 1.0, 1.0);
 
     pointLight.constant = 1.0f;
     pointLight.linear = 0.09f;
     pointLight.quadratic = 0.032f;
-
 
 
     // draw in wireframe
@@ -287,8 +347,6 @@ int main() {
         // input
         // -----
         processInput(window);
-
-
         // render
         // ------
         glClearColor(programState->clearColor.r, programState->clearColor.g, programState->clearColor.b, 1.0f);
@@ -296,7 +354,8 @@ int main() {
 
         // don't forget to enable shader before setting uniforms
         ourShader.use();
-        pointLight.position = glm::vec3(4.0 * cos(currentFrame), 4.0f, 4.0 * sin(currentFrame));
+        pointLight.position=lightPosition;
+        //pointLight.position = glm::vec3(4.0 * cos(currentFrame), 4.0f, 4.0 * sin(currentFrame));
         ourShader.setVec3("pointLight.position", pointLight.position);
         ourShader.setVec3("pointLight.ambient", pointLight.ambient);
         ourShader.setVec3("pointLight.diffuse", pointLight.diffuse);
@@ -306,6 +365,11 @@ int main() {
         ourShader.setFloat("pointLight.quadratic", pointLight.quadratic);
         ourShader.setVec3("viewPosition", programState->camera.Position);
         ourShader.setFloat("material.shininess", 32.0f);
+
+
+        set_spotLight(ourShader);
+
+
         // view/projection transformations
         glm::mat4 projection = glm::perspective(glm::radians(programState->camera.Zoom),
                                                 (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
@@ -313,15 +377,17 @@ int main() {
         ourShader.setMat4("projection", projection);
         ourShader.setMat4("view", view);
 
+
         // render the loaded model
         glm::mat4 model = glm::mat4(1.0f);
+#if  0
         model = glm::translate(model,
                                programState->statuePosition); // translate it down so it's at the center of the scene
         model = glm::scale(model, glm::vec3(programState->statueScale));// it's a bit too big for our scene, so scale it down
+#endif
 
-
-        //proba kretanja modela po sceni
-         //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
+        model = glm::translate(model, glm::vec3(3.0f,0.90f,1.0f)); // translate it down so it's at the center of the scene
+        model = glm::scale(model, glm::vec3(0.6f));// it's a bit too big for our scene, so scale it down
 
         //dodata rotacija oko Oy
         model = glm::rotate(model, glm::radians(currentFrame*50.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
@@ -330,37 +396,29 @@ int main() {
         ourModel.Draw(ourShader);
 
 
-        tmpShader.use();
-        pointLight.position = glm::vec3(1.0f * cos(currentFrame), 3.0f, 1.0 * sin(currentFrame));
-        tmpShader.setVec3("pointLight.position", pointLight.position);
-        tmpShader.setVec3("pointLight.ambient", pointLight.ambient);
-        tmpShader.setVec3("pointLight.diffuse", pointLight.diffuse);
-        tmpShader.setVec3("pointLight.specular", pointLight.specular);
-        tmpShader.setFloat("pointLight.constant", pointLight.constant);
-        tmpShader.setFloat("pointLight.linear", pointLight.linear);
-        tmpShader.setFloat("pointLight.quadratic", pointLight.quadratic);
-        tmpShader.setVec3("viewPosition", programState->camera.Position);
-        tmpShader.setFloat("material.shininess", 256.0f);
-        // view/projection transformations
-        glm::mat4 projectiontmp = glm::perspective(glm::radians(45.0f),
-                                                (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
-        glm::mat4 viewtmp = programState->camera.GetViewMatrix();
-        tmpShader.setMat4("projection", projectiontmp);
-        tmpShader.setMat4("view", viewtmp);
+    // render the loaded model
+        model = glm::mat4(1.0f);
+        model = glm::translate(model,glm::vec3(3.0f,0.0f,1.0f)); // translate it down so it's at the center of the scene
+        model = glm::scale(model, glm::vec3(2.0f));// it's a bit too big for our scene, so scale it down
 
-        // render the loaded model
-        glm::mat4 modelt = glm::mat4(1.0f);
-        modelt = glm::translate(modelt,glm::vec3(1.0f)); // translate it down so it's at the center of the scene
-        modelt = glm::scale(modelt, glm::vec3(0.4f));// it's a bit too big for our scene, so scale it down
+        ourShader.setMat4("model", model);
+        modelTmp.Draw(ourShader);
 
-        //proba kretanja modela po sceni
-        //model = glm::translate(model,glm::vec3((glfwGetTime()+1.0f)/2.0f*0.25f,0.0f,0.0f));
+        //drawing a light cube(light bulb)
+        lightingShader.use();
+        //projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        // view = camera.GetViewMatrix();
+        lightingShader.setMat4("projection", projection);
+        lightingShader.setMat4("view", view);
 
-        //dodata rotacija oko Oy
-        //modelt = glm::rotate(modelt, glm::radians(currentFrame*2.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
-
-        tmpShader.setMat4("model", modelt);
-        modelTmp.Draw(tmpShader);
+        // world transformation
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, lightPosition);
+        model = glm::scale(model, glm::vec3(0.2f)); // a smaller cube
+        lightingShader.setMat4("model", model);
+        // render the cube
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
 
         // draw skybox as last
@@ -394,7 +452,6 @@ int main() {
     ImGui::DestroyContext();
 
     glDeleteVertexArrays(1, &skyboxVAO);
-
     glDeleteBuffers(1, &skyboxVBO);
     // glfw: terminate, clearing all previously allocated GLFW resources.
     // ------------------------------------------------------------------
@@ -416,6 +473,15 @@ void processInput(GLFWwindow *window) {
         programState->camera.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         programState->camera.ProcessKeyboard(RIGHT, deltaTime);
+
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+        lightPosition+=glm::vec3(0.0f,0.0f,-1.0f) * 4.0f * deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+        lightPosition+=glm::vec3(0.0f,0.0f,1.0f)* 4.0f * deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+        lightPosition+=glm::vec3(-1.0f,0.0f,0.0f)*4.0f*deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+        lightPosition+=glm::vec3(1.0f,0.0f,0.0f)*4.0f*deltaTime;
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -486,6 +552,34 @@ void DrawImGui(ProgramState *programState) {
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+
+void set_spotLight(Shader& shader){
+    shader.setVec3("spotLight.position",programState->camera.Position);
+    shader.setVec3("spotLight.direction",programState->camera.Front);
+
+    if(spotLightActivated){
+        shader.setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+        shader.setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+        shader.setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+    }
+    else{
+        shader.setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+        shader.setVec3("spotLight.diffuse", 0.0f, 0.0f, 0.0f);
+        shader.setVec3("spotLight.specular", 0.0f, 0.0f, 0.0f);
+    }
+    shader.setFloat("spotLight.constant", 1.0f);
+    shader.setFloat("spotLight.linear", 0.80);
+    shader.setFloat("spotLight.quadratic", 0.032);
+    shader.setFloat("spotLight.cutOff", glm::cos(glm::radians(14.0f)));
+    shader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(21.0f)));
+
+    shader.setVec3("viewPos",programState->camera.Position);
+    shader.setFloat("material.shininess", 64.0f);
+
+}
+
+
+
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
     if (key == GLFW_KEY_F1 && action == GLFW_PRESS) {
         programState->ImGuiEnabled = !programState->ImGuiEnabled;
@@ -496,7 +590,11 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         }
     }
+    else if(key == GLFW_KEY_F && action == GLFW_PRESS){
+        spotLightActivated=!spotLightActivated;
+    }
 }
+
 
 unsigned int loadTexture(char const * path)
 {
