@@ -27,8 +27,9 @@ void processInput(GLFWwindow *window);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
 void set_spotLight(Shader& shader);
-
 void renderQuad();
+void renderQuad1();
+void renderCube();
 
 unsigned int loadCubemap(vector<std::string> faces);
 unsigned int loadTexture(const char *path);
@@ -110,6 +111,9 @@ void ProgramState::LoadFromFile(std::string filename) {
 ProgramState *programState;
 glm::vec3 lightPosition=glm::vec3(3.0f,2.5f,1.0f);
 bool spotLightActivated=false;
+bool bloom = true;
+bool bloomKeyPressed = false;
+float exposure = 1.0f;
 
 void DrawImGui(ProgramState *programState);
 
@@ -182,6 +186,15 @@ int main() {
     //Shader tmpShader("resources/shaders/tmp.vs", "resources/shaders/tmp.fs");
     Shader lightingShader("resources/shaders/lightCube.vs","resources/shaders/lightCube.fs");
     Shader parallaxShader("resources/shaders/parallax_mapping.vs","resources/shaders/parallax_mapping.fs");
+
+    //AA
+    Shader aashader("resources/shaders/aa.vs", "resources/shaders/aa.fs");
+//    Shader screenShader("resources/shaders/aa_post.vs", "resources/shaders/aa_post.fs");
+    //TO DO:doraditi "ourShader" kao "shader" da bi obradio reagovanje na bloom efekat
+    Shader shader("resources/shaders/bloom.vs", "resources/shaders/bloom.fs");
+    Shader shaderLight("resources/shaders/bloom.vs", "resources/shaders/light_box.fs");
+    Shader shaderBlur("resources/shaders/blur.vs", "resources/shaders/blur.fs");
+    Shader shaderBloomFinal("resources/shaders/bloom_final.vs", "resources/shaders/bloom_final.fs");
 
     // load models
     // -----------
@@ -310,6 +323,61 @@ int main() {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
+//BLOOM/HDR
+    // configure (floating point) framebuffers
+    // ---------------------------------------
+    unsigned int hdrFBO;
+    glGenFramebuffers(1, &hdrFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+    // create 2 floating point color buffers (1 for normal rendering, other for brightness threshold values)
+    unsigned int colorBuffers[2];
+    glGenTextures(2, colorBuffers);
+    for (unsigned int i = 0; i < 2; i++)
+    {
+        glBindTexture(GL_TEXTURE_2D, colorBuffers[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);  // we clamp to the edge as the blur filter would otherwise sample repeated texture values!
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        // attach texture to framebuffer
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, colorBuffers[i], 0);
+    }
+    // create and attach depth buffer (renderbuffer)
+    unsigned int rboDepth;
+    glGenRenderbuffers(1, &rboDepth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
+    // tell OpenGL which color attachments we'll use (of this framebuffer) for rendering
+    unsigned int attachments[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    //moramo da kazemo da cemo koristiit 2 color attachmenata za FRAGCOLOR i BRIGHTCOLOR
+    glDrawBuffers(2, attachments); //koristicemo 2bafera za crtanje
+    // finally check if framebuffer is complete
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "Framebuffer not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); //Deaktiviramo FB
+
+    // ping-pong-framebuffer for blurring
+    unsigned int pingpongFBO[2];
+    unsigned int pingpongColorbuffers[2]; //za color attachmente(teksture)
+    glGenFramebuffers(2, pingpongFBO);
+    glGenTextures(2, pingpongColorbuffers);
+    for (unsigned int i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); // we clamp to the edge as the blur filter would otherwise sample repeated texture values!
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+        // also check if framebuffers are complete (no need for depth buffer)
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            std::cout << "Framebuffer not complete!" << std::endl;
+    }
+//BLOOM/HDR
 //<-Ermin
 
     vector<std::string> faces
@@ -322,12 +390,10 @@ int main() {
                     FileSystem::getPath("resources/textures/skyboxtexture/nz.jpg")
             };
 
-
     unsigned int cubemapTexture = loadCubemap(faces);
     unsigned int diffuseMap = loadTexture(FileSystem::getPath("resources/textures/Wood_Wall_003_basecolor.jpg").c_str());
     unsigned int normalMap = loadTexture(FileSystem::getPath("resources/textures/Wood_Wall_003_normal.jpg").c_str());
     unsigned int heightMap = loadTexture(FileSystem::getPath("resources/textures/Wood_Wall_003_height.png").c_str());
-
 
     skyboxShader.use();
     skyboxShader.setInt("skybox", 0);
@@ -336,6 +402,19 @@ int main() {
     parallaxShader.setInt("diffuseMap", 0);
     parallaxShader.setInt("normalMap", 1);
     parallaxShader.setInt("depthMap", 2);
+
+//    // shader configuration
+//    // --------------------
+//    shader.use();
+//    screenShader.setInt("screenTexture", 0);
+
+    shader.use();
+    shader.setInt("diffuseTexture", 0);
+    shaderBlur.use();
+    shaderBlur.setInt("image", 0);
+    shaderBloomFinal.use();
+    shaderBloomFinal.setInt("scene", 0);
+    shaderBloomFinal.setInt("bloomBlur", 1);
 
 
     PointLight& pointLight = programState->pointLight;
@@ -348,7 +427,6 @@ int main() {
     pointLight.linear = 0.09f;
     pointLight.quadratic = 0.032f;
 
-
     // draw in wireframe
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
@@ -360,7 +438,6 @@ int main() {
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-
         // input
         // -----
         processInput(window);
@@ -369,10 +446,15 @@ int main() {
         glClearColor(programState->clearColor.r, programState->clearColor.g, programState->clearColor.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // don't forget to enable shader before setting uniforms
+//BLOOM
+        // 1. render scene into floating point framebuffer
+        // -----------------------------------------------
+        glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
         ourShader.use();
         pointLight.position=lightPosition;
-        pointLight.position = glm::vec3(4.0 * cos(currentFrame), 4.0f, 4.0 * sin(currentFrame));
+       // pointLight.position = glm::vec3(4.0 * cos(currentFrame), 4.0f, 4.0 * sin(currentFrame));
         ourShader.setVec3("pointLight.position", pointLight.position);
         ourShader.setVec3("pointLight.ambient", pointLight.ambient);
         ourShader.setVec3("pointLight.diffuse", pointLight.diffuse);
@@ -387,9 +469,6 @@ int main() {
         set_spotLight(ourShader);
 
         // normal mapping quad
-
-
-
         // view/projection transformations
         glm::mat4 projection = glm::perspective(glm::radians(programState->camera.Zoom),
                                                 (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
@@ -408,23 +487,19 @@ int main() {
 
         model = glm::translate(model, glm::vec3(3.0f,0.419f,1.0f)); // translate it down so it's at the center of the scene
         model = glm::scale(model, glm::vec3(0.3f));// it's a bit too big for our scene, so scale it down
-
         //dodata rotacija oko Oy
         model = glm::rotate(model, glm::radians(currentFrame*50.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
-
         ourShader.setMat4("model", model);
         ourModel.Draw(ourShader);
 
 
-    // render the loaded model
+        // render the loaded model
         model = glm::mat4(1.0f);
         model = glm::translate(model,glm::vec3(3.0f,0.419f,1.0f)); // translate it down so it's at the center of the scene
         model = glm::scale(model, glm::vec3(0.005f));// it's a bit too big for our scene, so scale it down
         model = glm::rotate(model, glm::radians(90.0f),glm::vec3(1.0f,0.0f,0.0f));
         ourShader.setMat4("model", model);
         modelTmp.Draw(ourShader);
-
-
 
         parallaxShader.use();
         parallaxShader.setMat4("projection", projection);
@@ -449,28 +524,31 @@ int main() {
         renderQuad();
         glEnable(GL_CULL_FACE);
 
+//drawing a light cube(light bulb)
 
 
-        //drawing a light cube(light bulb)
-        lightingShader.use();
-        //projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        // view = camera.GetViewMatrix();
-        lightingShader.setMat4("projection", projection);
-        lightingShader.setMat4("view", view);
-
+//        lightingShader.use();
+//        //projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+//        // view = camera.GetViewMatrix();
+//        lightingShader.setMat4("projection", projection);
+//        lightingShader.setMat4("view", view);
+        shaderLight.use();
+        shaderLight.setMat4("projection", projection);
+        shaderLight.setMat4("view", view);
         // world transformation
         model = glm::mat4(1.0f);
         model = glm::translate(model, lightPosition);
         model = glm::scale(model, glm::vec3(0.2f)); // a smaller cube
-        lightingShader.setMat4("model", model);
-
-        // render the cube
+        //lightingShader.setMat4("model", model);
+        shaderLight.setMat4("model", model);
+        shaderLight.setVec3("lightColor", glm::vec3(8.5f,  8.0f, 1.0f));
         glCullFace(GL_BACK);
-        glBindVertexArray(cubeVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-
-
+        renderCube();
+        // render the cube
+//        glBindVertexArray(cubeVAO);
+//        glDrawArrays(GL_TRIANGLES, 0, 36);
         glCullFace(GL_FRONT);
+
         // draw skybox as last
         glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
         skyboxShader.use();
@@ -485,6 +563,56 @@ int main() {
         glBindVertexArray(0);
         glDepthFunc(GL_LESS);
 
+//set transformation matrices
+        aashader.use();
+        projection = glm::perspective(glm::radians(programState->camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+        aashader.setMat4("projection", projection);
+        aashader.setMat4("view", programState->camera.GetViewMatrix());
+//        model =glm::translate(model,lightPosition + glm::vec3(1.0,1.0,1.0));
+        model=glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(2.1f,0.0f,0.5f)); // translate it down so it's at the center of the scene
+        model=glm::scale(model,glm::vec3(0.25f));
+        aashader.setMat4("model", model);
+
+        glDisable(GL_CULL_FACE);
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glEnable(GL_CULL_FACE);
+
+//BLOOM
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // 2. blur bright fragments with two-pass Gaussian Blur
+        // --------------------------------------------------
+        bool horizontal = true, first_iteration = true;
+        unsigned int amount = 10;
+        shaderBlur.use();
+        for (unsigned int i = 0; i < amount; i++)
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
+            shaderBlur.setInt("horizontal", horizontal);
+            glBindTexture(GL_TEXTURE_2D, first_iteration ? colorBuffers[1] : pingpongColorbuffers[!horizontal]);  // bind texture of other framebuffer (or scene if first iteration)
+            renderQuad1();
+            horizontal = !horizontal;
+            if (first_iteration)
+                first_iteration = false;
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // 3. now render floating point color buffer to 2D quad and tonemap HDR colors to default framebuffer's (clamped) color range
+        // --------------------------------------------------------------------------------------------------------------------------
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        shaderBloomFinal.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, colorBuffers[0]);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[!horizontal]);
+        shaderBloomFinal.setInt("bloom", bloom);
+        shaderBloomFinal.setFloat("exposure", exposure);
+        renderQuad1();
+
+        std::cout << "bloom: " << (bloom ? "on" : "off") << "| exposure: " << exposure << std::endl;
 
 
         if (programState->ImGuiEnabled)
@@ -510,8 +638,113 @@ int main() {
     return 0;
 }
 
-// renders a 1x1 quad in NDC with manually calculated tangent vectors
-// ------------------------------------------------------------------
+// renderCube() renders a 1x1 3D cube in NDC.
+// -------------------------------------------------
+unsigned int cubeVAO = 0;
+unsigned int cubeVBO = 0;
+void renderCube()
+{
+    // initialize (if necessary)
+    if (cubeVAO == 0)
+    {
+        float vertices[] = {
+                // back face
+                -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
+                1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
+                1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, // bottom-right
+                1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
+                -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
+                -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, // top-left
+                // front face
+                -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
+                1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, // bottom-right
+                1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
+                1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
+                -1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, // top-left
+                -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
+                // left face
+                -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
+                -1.0f,  1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-left
+                -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
+                -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
+                -1.0f, -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-right
+                -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
+                // right face
+                1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
+                1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
+                1.0f,  1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-right
+                1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
+                1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
+                1.0f, -1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-left
+                // bottom face
+                -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
+                1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, // top-left
+                1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
+                1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
+                -1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, // bottom-right
+                -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
+                // top face
+                -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
+                1.0f,  1.0f , 1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
+                1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, // top-right
+                1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
+                -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
+                -1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f  // bottom-left
+        };
+        glGenVertexArrays(1, &cubeVAO);
+        glGenBuffers(1, &cubeVBO);
+        // fill buffer
+        glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+        // link vertex attributes
+        glBindVertexArray(cubeVAO);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+    }
+    // render Cube
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+}
+
+// renderQuad() renders a 1x1 XY quad in NDC
+// -----------------------------------------
+unsigned int quadVAO1 = 0;
+unsigned int quadVBO1;
+void renderQuad1()
+{
+    if (quadVAO1 == 0)
+    {
+        float quadVertices[] = {
+                // positions        // texture Coords
+                -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+                -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+                1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+                1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        };
+        // setup plane VAO
+        glGenVertexArrays(1, &quadVAO1);
+        glGenBuffers(1, &quadVBO1);
+        glBindVertexArray(quadVAO1);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO1);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO1);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+}
+
+
 unsigned int quadVAO = 0;
 unsigned int quadVBO;
 void renderQuad()
@@ -639,6 +872,28 @@ void processInput(GLFWwindow *window) {
             heightScale += 0.0005f;
         else
             heightScale = 1.0f;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !bloomKeyPressed)
+    {
+        bloom = !bloom;
+        bloomKeyPressed = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE)
+    {
+        bloomKeyPressed = false;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS)
+    {
+        if (exposure > 0.0f)
+            exposure -= 0.001f;
+        else
+            exposure = 0.0f;
+    }
+    else if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS)
+    {
+        exposure += 0.001f;
     }
 }
 
@@ -820,5 +1075,3 @@ unsigned int loadCubemap(vector<std::string> faces)
 
     return textureID;
 }
-
-
