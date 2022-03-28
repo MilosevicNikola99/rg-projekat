@@ -27,6 +27,7 @@ void processInput(GLFWwindow *window);
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
 void set_spotLight(Shader& shader);
+
 void renderQuad();
 void renderQuad1();
 void renderCube();
@@ -49,6 +50,14 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
+struct DirLight {
+    glm::vec3 direction;
+
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+};
+
 struct PointLight {
     glm::vec3 position;
     glm::vec3 ambient;
@@ -60,16 +69,33 @@ struct PointLight {
     float quadratic;
 };
 
+struct SpotLight {
+    glm::vec3 position;
+    glm::vec3 direction;
+    float cutOff;
+    float outerCutOff;
+
+    float constant;
+    float linear;
+    float quadratic;
+
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+};
+
 struct ProgramState {
     glm::vec3 clearColor = glm::vec3(0);
     bool ImGuiEnabled = false;
     Camera camera;
     bool CameraMouseMovementUpdateEnabled = true;
     glm::vec3 statuePosition = glm::vec3(0.0f);
-    glm::vec3 tablePosition = glm::vec3(0.0f);
-    float statueScale = 1.0f;
-    float tableScale=1.0f;
-    PointLight pointLight;
+    glm::vec3 pedestalPosition = glm::vec3(0.0f);
+    float statueScale = 0.5f;
+    float pedestalScale=0.006f;
+    PointLight pointLight0;
+    PointLight pointLight1;
+    DirLight dirLight;
     ProgramState()
             : camera(glm::vec3(0.0f, 0.0f, 3.0f)) {}
 
@@ -111,9 +137,9 @@ void ProgramState::LoadFromFile(std::string filename) {
 ProgramState *programState;
 glm::vec3 lightPosition=glm::vec3(3.0f,2.5f,1.0f);
 bool spotLightActivated=false;
-bool bloom = true;
+bool bloom = false;
 bool bloomKeyPressed = false;
-float exposure = 1.0f;
+float exposure = 0.5f;
 
 void DrawImGui(ProgramState *programState);
 
@@ -183,9 +209,12 @@ int main() {
     // -------------------------
     Shader ourShader("resources/shaders/2.model_lighting.vs", "resources/shaders/2.model_lighting.fs");
     Shader skyboxShader("resources/shaders/skybox.vs","resources/shaders/skybox.fs");
-    //Shader tmpShader("resources/shaders/tmp.vs", "resources/shaders/tmp.fs");
+
     Shader lightingShader("resources/shaders/lightCube.vs","resources/shaders/lightCube.fs");
+
+    Shader normalShader("resources/shaders/normalmapping.vs","resources/shaders/normalmapping.fs");
     Shader parallaxShader("resources/shaders/parallax_mapping.vs","resources/shaders/parallax_mapping.fs");
+    Shader blendingShader("resources/shaders/blending.vs","resources/shaders/blending.fs");
 
     //AA
     Shader aashader("resources/shaders/aa.vs", "resources/shaders/aa.fs");
@@ -198,11 +227,11 @@ int main() {
 
     // load models
     // -----------
-    Model ourModel("resources/objects/LibertyStatue/LibertStatue.obj");
-    Model modelTmp("resources/objects/10421_square_pedastal_iterations-2.obj");
+    Model statuaModel("resources/objects/LibertyStatue/LibertStatue.obj");
+    Model postoljeModel("resources/objects/10421_square_pedastal_iterations-2.obj");
 
-    ourModel.SetShaderTextureNamePrefix("material.");
-    modelTmp.SetShaderTextureNamePrefix("material.");
+    statuaModel.SetShaderTextureNamePrefix("material.");
+    postoljeModel.SetShaderTextureNamePrefix("material.");
 
     float vertices[] = {
             -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
@@ -295,6 +324,23 @@ int main() {
             1.0f, -1.0f,  1.0f
     };
 
+    float transparentVertices[] = {
+            // positions         // texture Coords (swapped y coordinates because texture is flipped upside down)
+            0.0f,  0.5f,  0.0f,  0.0f,  0.0f,
+            0.0f, -0.5f,  0.0f,  0.0f,  1.0f,
+            1.0f, -0.5f,  0.0f,  1.0f,  1.0f,
+
+            0.0f,  0.5f,  0.0f,  0.0f,  0.0f,
+            1.0f, -0.5f,  0.0f,  1.0f,  1.0f,
+            1.0f,  0.5f,  0.0f,  1.0f,  0.0f
+    };
+
+    glm::vec3 pointLightPositions[] = {
+            glm::vec3( -4.0f,  4.0f,  2.0f),
+            glm::vec3(4.0f, 4.0, -2.0)
+
+    };
+
     unsigned int skyboxVAO, skyboxVBO;
     glGenVertexArrays(1, &skyboxVAO);
     glGenBuffers(1, &skyboxVBO);
@@ -380,6 +426,19 @@ int main() {
 //BLOOM/HDR
 //<-Ermin
 
+    unsigned int transparentVAO, transparentVBO;
+    glGenVertexArrays(1, &transparentVAO);
+    glGenBuffers(1, &transparentVBO);
+    glBindVertexArray(transparentVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, transparentVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(transparentVertices), transparentVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glBindVertexArray(0);
+
+
     vector<std::string> faces
             {
                     FileSystem::getPath("resources/textures/skyboxtexture/px.jpg"),
@@ -390,23 +449,53 @@ int main() {
                     FileSystem::getPath("resources/textures/skyboxtexture/nz.jpg")
             };
 
+
     unsigned int cubemapTexture = loadCubemap(faces);
-    unsigned int diffuseMap = loadTexture(FileSystem::getPath("resources/textures/Wood_Wall_003_basecolor.jpg").c_str());
-    unsigned int normalMap = loadTexture(FileSystem::getPath("resources/textures/Wood_Wall_003_normal.jpg").c_str());
-    unsigned int heightMap = loadTexture(FileSystem::getPath("resources/textures/Wood_Wall_003_height.png").c_str());
+
+    unsigned int n_diffuseMap = loadTexture(FileSystem::getPath("resources/textures/marble_01_diff_4k.jpg").c_str());
+    unsigned int n_normalMap  = loadTexture(FileSystem::getPath("resources/textures/marble_01_nor_gl_4k.jpg").c_str());
+
+    unsigned int p_diffuseMap = loadTexture(FileSystem::getPath("resources/textures/floor_tiles_08_diff_4k.jpg").c_str());
+    unsigned int p_normalMap = loadTexture(FileSystem::getPath("resources/textures/floor_tiles_08_nor_gl_4k.jpg").c_str());
+    unsigned int p_heightMap = loadTexture(FileSystem::getPath("resources/textures/floor_tiles_08_disp_4k.jpg").c_str());
+
+    unsigned int transparentTexture = loadTexture(FileSystem::getPath("resources/textures/11_ccexpress.png").c_str());
+
+    vector<glm::vec3> vegetation
+            {
+                    glm::vec3(-0.27f, -0.28f, -0.5f),
+                    glm::vec3( -0.27f, -0.28f, 0.5f),
+
+            };
+
+    vector<glm::vec3> brickPos
+    {
+            glm::vec3(0.0f,-0.5,1.4f),
+            glm::vec3(1.4f,-0.5,0.0f),
+            glm::vec3(1.4f,-0.5,1.40),
+            glm::vec3(0.0f,-0.5,-1.4f),
+            glm::vec3(-1.4f,-0.5,0.0f),
+            glm::vec3(-1.4f,-0.5,-1.40),
+            glm::vec3(1.4f,-0.5,-1.4f),
+            glm::vec3(-1.4f,-0.5,1.4f),
+
+
+
+    };
+
+
 
     skyboxShader.use();
     skyboxShader.setInt("skybox", 0);
+
+    normalShader.use();
+    normalShader.setInt("diffuseMap", 0);
+    normalShader.setInt("normalMap", 1);
 
     parallaxShader.use();
     parallaxShader.setInt("diffuseMap", 0);
     parallaxShader.setInt("normalMap", 1);
     parallaxShader.setInt("depthMap", 2);
-
-//    // shader configuration
-//    // --------------------
-//    shader.use();
-//    screenShader.setInt("screenTexture", 0);
 
     shader.use();
     shader.setInt("diffuseTexture", 0);
@@ -416,16 +505,34 @@ int main() {
     shaderBloomFinal.setInt("scene", 0);
     shaderBloomFinal.setInt("bloomBlur", 1);
 
+    blendingShader.use();
+    blendingShader.setInt("texture1",0);
 
-    PointLight& pointLight = programState->pointLight;
-    pointLight.position = glm::vec3(4.0f, 4.0, 0.0);
-    pointLight.ambient = glm::vec3(0.6, 0.6, 0.6);
-    pointLight.diffuse = glm::vec3(0.8, 0.8, 0.8);
-    pointLight.specular = glm::vec3(1.0, 1.0, 1.0);
+    PointLight& pointLight0 = programState->pointLight0;
+    pointLight0.position = glm::vec3(pointLightPositions[0]);
+    pointLight0.ambient = glm::vec3(0.6, 0.6, 0.6);
+    pointLight0.diffuse = glm::vec3(0.8, 0.8, 0.8);
+    pointLight0.specular = glm::vec3(1.0, 1.0, 1.0);
 
-    pointLight.constant = 1.0f;
-    pointLight.linear = 0.09f;
-    pointLight.quadratic = 0.032f;
+    pointLight0.constant = 1.0f;
+    pointLight0.linear = 0.09f;
+    pointLight0.quadratic = 0.032f;
+
+    PointLight& pointLight1 = programState->pointLight1;
+    pointLight1.position = glm::vec3(pointLightPositions[1]);
+    pointLight1.ambient = glm::vec3(0.6, 0.6, 0.6);
+    pointLight1.diffuse = glm::vec3(0.8, 0.8, 0.8);
+    pointLight1.specular = glm::vec3(1.0, 1.0, 1.0);
+
+    pointLight1.constant = 1.0f;
+    pointLight1.linear = 0.09f;
+    pointLight1.quadratic = 0.032f;
+
+    DirLight& dirLight= programState->dirLight;
+    dirLight.direction = glm::vec3(0.2f, 1.0f, 0.3f);
+    dirLight.ambient = glm::vec3(0.2, 0.2, 0.2f);
+    dirLight.diffuse = glm::vec3(0.4, 0.4, 0.4);
+    dirLight.specular = glm::vec3(0.5, 0.5, 0.5);
 
     // draw in wireframe
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -438,13 +545,14 @@ int main() {
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+
         // input
         // -----
         processInput(window);
         // render
         // ------
         glClearColor(programState->clearColor.r, programState->clearColor.g, programState->clearColor.b, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        //glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 //BLOOM
         // 1. render scene into floating point framebuffer
@@ -453,22 +561,37 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         ourShader.use();
-        pointLight.position=lightPosition;
-       // pointLight.position = glm::vec3(4.0 * cos(currentFrame), 4.0f, 4.0 * sin(currentFrame));
-        ourShader.setVec3("pointLight.position", pointLight.position);
-        ourShader.setVec3("pointLight.ambient", pointLight.ambient);
-        ourShader.setVec3("pointLight.diffuse", pointLight.diffuse);
-        ourShader.setVec3("pointLight.specular", pointLight.specular);
-        ourShader.setFloat("pointLight.constant", pointLight.constant);
-        ourShader.setFloat("pointLight.linear", pointLight.linear);
-        ourShader.setFloat("pointLight.quadratic", pointLight.quadratic);
-        ourShader.setVec3("viewPosition", programState->camera.Position);
+        pointLight0.position=pointLightPositions[0];
+        //pointLight0.position = glm::vec3(4.0 * cos(currentFrame), 4.0f, 4.0 * sin(currentFrame));
+
+        ourShader.setVec3("dirLight.direction",dirLight.direction );
         ourShader.setFloat("material.shininess", 32.0f);
 
+        // light properties
+        ourShader.setVec3("dirLight.ambient",dirLight.ambient );
+        ourShader.setVec3("dirLight.diffuse",  dirLight.diffuse);
+        ourShader.setVec3("dirLight.specular", dirLight.specular);
+        ourShader.setVec3("viewPosition", programState->camera.Position);
+
+
+        ourShader.setVec3("pointLight0.position", pointLight0.position);
+        ourShader.setVec3("pointLight0.ambient", pointLight0.ambient);
+        ourShader.setVec3("pointLight0.diffuse", pointLight0.diffuse);
+        ourShader.setVec3("pointLight0.specular", pointLight0.specular);
+        ourShader.setFloat("pointLight0.constant", pointLight0.constant);
+        ourShader.setFloat("pointLight0.linear", pointLight0.linear);
+        ourShader.setFloat("pointLight0.quadratic", pointLight0.quadratic);
+
+        ourShader.setVec3("pointLight1.position", pointLight1.position);
+        ourShader.setVec3("pointLight1.ambient", pointLight1.ambient);
+        ourShader.setVec3("pointLight1.diffuse", pointLight1.diffuse);
+        ourShader.setVec3("pointLight1.specular", pointLight1.specular);
+        ourShader.setFloat("pointLight1.constant", pointLight1.constant);
+        ourShader.setFloat("pointLight1.linear", pointLight1.linear);
+        ourShader.setFloat("pointLight1.quadratic", pointLight1.quadratic);
 
         set_spotLight(ourShader);
 
-        // normal mapping quad
         // view/projection transformations
         glm::mat4 projection = glm::perspective(glm::radians(programState->camera.Zoom),
                                                 (float) SCR_WIDTH / (float) SCR_HEIGHT, 0.1f, 100.0f);
@@ -479,52 +602,130 @@ int main() {
 
         // render the loaded model
         glm::mat4 model = glm::mat4(1.0f);
-#if  0
-        model = glm::translate(model,
-                               programState->statuePosition); // translate it down so it's at the center of the scene
+        model = glm::translate(model,programState->statuePosition); // translate it down so it's at the center of the scene
         model = glm::scale(model, glm::vec3(programState->statueScale));// it's a bit too big for our scene, so scale it down
-#endif
 
-        model = glm::translate(model, glm::vec3(3.0f,0.419f,1.0f)); // translate it down so it's at the center of the scene
-        model = glm::scale(model, glm::vec3(0.3f));// it's a bit too big for our scene, so scale it down
         //dodata rotacija oko Oy
         model = glm::rotate(model, glm::radians(currentFrame*50.0f),glm::vec3(0.0f,1.0f,0.0f));// it's a bit too big for our scene, so scale it down
+
         ourShader.setMat4("model", model);
-        ourModel.Draw(ourShader);
+        statuaModel.Draw(ourShader);
 
 
-        // render the loaded model
+    // render the loaded model
         model = glm::mat4(1.0f);
-        model = glm::translate(model,glm::vec3(3.0f,0.419f,1.0f)); // translate it down so it's at the center of the scene
-        model = glm::scale(model, glm::vec3(0.005f));// it's a bit too big for our scene, so scale it down
+        model = glm::translate(model,programState->pedestalPosition); // translate it down so it's at the center of the scene
+        model = glm::scale(model, glm::vec3(programState->pedestalScale));// it's a bit too big for our scene, so scale it down
         model = glm::rotate(model, glm::radians(90.0f),glm::vec3(1.0f,0.0f,0.0f));
         ourShader.setMat4("model", model);
-        modelTmp.Draw(ourShader);
+        postoljeModel.Draw(ourShader);
+
+        blendingShader.use();
+        blendingShader.setMat4("projection",projection);
+        blendingShader.setMat4("view",view);
+
+
+
+        glDisable(GL_CULL_FACE);
+        glBindVertexArray(transparentVAO);
+        glBindTexture(GL_TEXTURE_2D, transparentTexture);
+        for (unsigned int i = 0; i < vegetation.size(); i++)
+        {
+
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, vegetation[i]);
+            model = glm::scale(model, glm::vec3(0.5f));
+
+            blendingShader.setMat4("model", model);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        glEnable(GL_CULL_FACE);
+
+
+        normalShader.use();
+        normalShader.setMat4("projection", projection);
+        normalShader.setMat4("view", view);
+        model = glm::mat4(1.0f);
+
+        model = glm::translate(model,glm::vec3(0.0f,-0.5,1.40));
+        model = glm::scale(model, glm::vec3(0.7f));
+        model = glm::rotate(model, glm::radians(90.0f), glm::normalize(glm::vec3(1.0, 0.0, 0.0))); // rotate the quad to show normal mapping from multiple directions
+        model = glm::rotate(model, glm::radians(180.0f),glm::normalize(glm::vec3(0.0f,1.0f,.0f)));
+        normalShader.setMat4("model", model);
+        normalShader.setVec3("viewPos", programState->camera.Position);
+        normalShader.setVec3("lightPos",pointLight0.position );
+
+
+
+        glDisable(GL_CULL_FACE);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, n_diffuseMap);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, n_normalMap);
+        for(unsigned int i=0;i < brickPos.size();i++) {
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, brickPos[i]);
+            model = glm::rotate(model, glm::radians(90.0f), glm::normalize(glm::vec3(1.0, 0.0, 0.0))); // rotate the quad to show normal mapping from multiple directions
+            model = glm::rotate(model, glm::radians(180.0f),glm::normalize(glm::vec3(0.0f,1.0f,.0f)));
+            model = glm::scale(model, glm::vec3(0.7f));
+
+            normalShader.setMat4("model", model);
+            renderQuad();
+        }
+        glEnable(GL_CULL_FACE);
+
 
         parallaxShader.use();
+
         parallaxShader.setMat4("projection", projection);
         parallaxShader.setMat4("view", view);
         model = glm::mat4(1.0f);
-        model = glm::translate(model,glm::vec3(3.0f,0.0f,1.0f));
+        model = glm::translate(model,glm::vec3(0.0f,-0.5,0));
         model = glm::scale(model, glm::vec3(0.7f));
         model = glm::rotate(model, glm::radians(90.0f),glm::normalize(glm::vec3(1.0f,0.0f,.0f)));
         model = glm::rotate(model, glm::radians(180.0f),glm::normalize(glm::vec3(0.0f,1.0f,.0f)));
         parallaxShader.setMat4("model", model);
         parallaxShader.setVec3("viewPos", programState->camera.Position);
-        parallaxShader.setVec3("lightPos",pointLight.position );
+        parallaxShader.setVec3("lightPos",pointLight0.position );
         parallaxShader.setFloat("heightScale", heightScale);
 
         glDisable(GL_CULL_FACE);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, diffuseMap);
+        glBindTexture(GL_TEXTURE_2D, p_diffuseMap);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, normalMap);
+        glBindTexture(GL_TEXTURE_2D, p_normalMap);
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, heightMap);
+        glBindTexture(GL_TEXTURE_2D, p_heightMap);
         renderQuad();
         glEnable(GL_CULL_FACE);
 
-//drawing a light cube(light bulb)
+
+        //drawing a light cube(light bulb)
+        lightingShader.use();
+        lightingShader.setMat4("projection", projection);
+        lightingShader.setMat4("view", view);
+
+
+
+        // we now draw as many light bulbs as we have point lights.
+        glCullFace(GL_BACK);
+        glBindVertexArray(cubeVAO);
+        for (unsigned int i = 0; i < 2; i++)
+        {
+            model = glm::mat4(1.0f);
+            glm::vec3 pos;
+            if(i==0)
+                pos = pointLight0.position;
+            else
+                pos = pointLight1.position;
+
+            model = glm::translate(model, pos);
+            model = glm::scale(model, glm::vec3(0.5f)); // Make it a smaller cube
+            lightingShader.setMat4("model", model);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+
+
 
 
 //        lightingShader.use();
@@ -542,13 +743,14 @@ int main() {
         //lightingShader.setMat4("model", model);
         shaderLight.setMat4("model", model);
         shaderLight.setVec3("lightColor", glm::vec3(8.5f,  8.0f, 1.0f));
-        glCullFace(GL_BACK);
+        glDisable(GL_CULL_FACE);
         renderCube();
         // render the cube
 //        glBindVertexArray(cubeVAO);
 //        glDrawArrays(GL_TRIANGLES, 0, 36);
-        glCullFace(GL_FRONT);
+        glEnable(GL_CULL_FACE);
 
+        glCullFace(GL_FRONT);
         // draw skybox as last
         glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
         skyboxShader.use();
@@ -574,10 +776,10 @@ int main() {
         model=glm::scale(model,glm::vec3(0.25f));
         aashader.setMat4("model", model);
 
-        glDisable(GL_CULL_FACE);
+
         glBindVertexArray(cubeVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
-        glEnable(GL_CULL_FACE);
+
 
 //BLOOM
 
@@ -938,16 +1140,36 @@ void DrawImGui(ProgramState *programState) {
 
     {
         static float f = 0.0f;
-        ImGui::Begin("Hello window");
-        ImGui::Text("Hello text");
-        ImGui::SliderFloat("Float slider", &f, 0.0, 1.0);
-        ImGui::ColorEdit3("Background color", (float *) &programState->clearColor);
+        ImGui::Begin("Podesavanja");
+        ImGui::Text("Podesavanje statue");
+
+
         ImGui::DragFloat3("Statue position", (float*)&programState->statuePosition);
         ImGui::DragFloat("Statue scale", &programState->statueScale, 0.05, 0.1, 4.0);
 
-        ImGui::DragFloat("pointLight.constant", &programState->pointLight.constant, 0.05, 0.0, 1.0);
-        ImGui::DragFloat("pointLight.linear", &programState->pointLight.linear, 0.05, 0.0, 1.0);
-        ImGui::DragFloat("pointLight.quadratic", &programState->pointLight.quadratic, 0.05, 0.0, 1.0);
+        ImGui::Text("Podesavanje postolja");
+        ImGui::DragFloat3("Pedestal position", (float*)&programState->pedestalPosition);
+        ImGui::DragFloat("Pedestal scale", &programState->pedestalScale, 0.05, 0.006, 4.0);
+
+
+        ImGui::Text("Podesavanje pointLight0");
+        ImGui::DragFloat("pointLight0.constant", &programState->pointLight0.constant, 0.05, 0.0, 1.0);
+        ImGui::DragFloat("pointLight0.linear", &programState->pointLight0.linear, 0.05, 0.0, 1.0);
+        ImGui::DragFloat("pointLight0.quadratic", &programState->pointLight0.quadratic, 0.05, 0.0, 1.0);
+
+        ImGui::Text("Podesavanje pointLight1");
+        ImGui::DragFloat("pointLight0.constant", &programState->pointLight1.constant, 0.05, 0.0, 1.0);
+        ImGui::DragFloat("pointLight0.linear", &programState->pointLight1.linear, 0.05, 0.0, 1.0);
+        ImGui::DragFloat("pointLight0.quadratic", &programState->pointLight1.quadratic, 0.05, 0.0, 1.0);
+
+        ImGui::Text("Podesavanje direkcionog svetla");
+        ImGui::DragFloat3("dirLight.direction", (float*)&programState->dirLight.direction,  0.05,0.0, 1.0);
+        ImGui::DragFloat("dirLight.ambient", (float*)&programState->dirLight.ambient, 0.05, 0.0, 1.0);
+        ImGui::DragFloat("dirLight.diffuse", (float*)&programState->dirLight.diffuse, 0.05, 0.0, 1.0);
+        ImGui::DragFloat("dirLight.specular ", (float*)&programState->dirLight.specular, 0.05, 0.0, 1.0);
+
+
+
         ImGui::End();
     }
 
@@ -987,7 +1209,7 @@ void set_spotLight(Shader& shader){
     shader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(21.0f)));
 
     shader.setVec3("viewPos",programState->camera.Position);
-    shader.setFloat("material.shininess", 64.0f);
+    shader.setFloat("material.shininess", 32.0f);
 
 }
 
@@ -1075,3 +1297,5 @@ unsigned int loadCubemap(vector<std::string> faces)
 
     return textureID;
 }
+
+
