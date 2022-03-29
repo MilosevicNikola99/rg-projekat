@@ -1,5 +1,7 @@
 #version 330 core
-out vec4 FragColor;
+// out vec4 FragColor;
+layout (location = 0) out vec4 FragColor;
+layout (location = 1) out vec4 BrightColor;
 
 struct Material {
     sampler2D diffuse;
@@ -51,6 +53,8 @@ uniform vec3 viewPos;
 uniform DirLight dirLight;
 uniform PointLight pointLight0;
 uniform PointLight pointLight1;
+uniform PointLight pointLight2;
+
 uniform SpotLight spotLight;
 uniform Material material;
 
@@ -71,9 +75,19 @@ void main()
     result += CalcPointLight(pointLight0, norm, FragPos, viewDir);
 
     result += CalcPointLight(pointLight1, norm, FragPos, viewDir);
+
+    result += CalcPointLight(pointLight2, norm, FragPos, viewDir);
+
     // phase 3: spot light
     result += CalcSpotLight(spotLight, norm, FragPos, viewDir);
-
+//dodato
+    float brightness = dot(result, vec3(0.2126, 0.7152, 0.0722));
+    if(brightness > 1.0)
+        BrightColor = vec4(result, 1.0);
+    else
+        BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
+//         FragColor = vec4(result, 1.0);
+//-<dodato
     FragColor = vec4(result, 1.0);
 }
 
@@ -100,8 +114,9 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
     // diffuse shading
     float diff = max(dot(normal, lightDir), 0.0);
     // specular shading
-    vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
+//     vec3 halfwayDir = normalize(lightDir + viewDir);
+    vec3 reflectDir=reflect(-lightDir,normal);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
     // attenuation
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
