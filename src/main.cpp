@@ -607,6 +607,7 @@ int main() {
     dirLight.diffuse = glm::vec3(0.4, 0.4, 0.4);
     dirLight.specular = glm::vec3(0.5, 0.5, 0.5);
 
+    lightPosition.y=pointLight0.position.y;
     // draw in wireframe
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
