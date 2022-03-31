@@ -12,5 +12,5 @@
 5. Efekti: \
     -grayscale na dugme G\
    -blur efekat na dugme B\
-   -color unversion na dugme I 
+   -color inversion na dugme I 
 
