@@ -1,14 +1,16 @@
-# project_base
-Prazan projekat sa pratećim bibliotekama koje koristimo na času. 
-
 # Uputstvo
-1. `git clone https://github.com/matf-racunarska-grafika/project_base.git`
-2. CLion -> Open -> path/to/my/project_base
-3. Main se nalazi u src/main.cpp
-4. Cpp fajlovi idu u src folder
-5. Zaglavlja (h i hpp) fajlovi idu u include
-6. Šejderi idu u folder shaders. `Vertex shader` ima ekstenziju `.vs`, `fragment shader` ima ekstenziju `.fs`
-7. ALT+SHIFT+F10 -> project_base -> run
-<<<<<<< HEAD
-8. PROmena2
+
+1. za pomeranje : \
+   -unapred  pritisnuti dugme W \
+   -unazad  pritisnuti dugme S \
+   -ulevo  pritisnuti dugme A \
+   -udesno  pritisnuti dugme D
+
+2. podesavanje heightScale za parallax mapping na Q i E
+3. paljenje i gasenje bloom-a na SPACE 
+4. podesavanje exposure za HDR na M i P
+5. Efekti: \
+    -grayscale na dugme G\
+   -blur efekat na dugme B\
+   -color unversion na dugme I 
 

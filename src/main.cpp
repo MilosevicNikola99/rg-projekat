@@ -136,7 +136,7 @@ void ProgramState::LoadFromFile(std::string filename) {
 }
 
 ProgramState *programState;
-glm::vec3 lightPosition=glm::vec3(3.0f,2.5f,1.0f);
+glm::vec3 lightPosition=glm::vec3(3.0f,0.8f,1.0f);
 bool spotLightActivated=false;
 bool bloom = false;
 bool bloomKeyPressed = false;
@@ -385,7 +385,8 @@ int main() {
 
     glm::vec3 pointLightPositions[] = {
             glm::vec3( -4.0f,  4.0f,  2.0f),
-            glm::vec3(4.0f, 4.0, -2.0)
+            glm::vec3(4.0f, 4.0, -2.0),
+            glm::vec3(2.0f, 4.0, -4.0)
     };
     
     unsigned int skyboxVAO, skyboxVBO;
@@ -592,7 +593,7 @@ int main() {
 
 
     PointLight& pointLight2 =programState->pointLight2;
-    pointLight2.position =  glm::vec3(lightPosition);
+    pointLight2.position =  glm::vec3(pointLightPositions[2]);
     pointLight2.ambient = glm::vec3(0.6, 0.6, 0.6);
     pointLight2.diffuse = glm::vec3(0.8, 0.8, 0.8);
     pointLight2.specular = glm::vec3(1.0, 1.0, 1.0);
@@ -831,7 +832,7 @@ int main() {
         shaderBloom.setMat4("view", view);
         // world transformation
         model = glm::mat4(1.0f);
-        model = glm::translate(model, lightPosition);
+        model = glm::translate(model,glm::vec3( pointLight2.position));
         model = glm::scale(model, glm::vec3(0.3f)); // a smaller cube
         shaderBloom.setMat4("model", model);
         shaderBloom.setVec3("lightColor", glm::vec3(8.5f,  8.0f, 1.0f));
@@ -1144,14 +1145,7 @@ void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         programState->camera.ProcessKeyboard(RIGHT, deltaTime);
 
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-        lightPosition+=glm::vec3(0.0f,0.0f,-1.0f) * 4.0f * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-        lightPosition+=glm::vec3(0.0f,0.0f,1.0f)* 4.0f * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-        lightPosition+=glm::vec3(-1.0f,0.0f,0.0f)*4.0f*deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-        lightPosition+=glm::vec3(1.0f,0.0f,0.0f)*4.0f*deltaTime;
+
 
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
     {
@@ -1235,6 +1229,7 @@ void DrawImGui(ProgramState *programState) {
         ImGui::Begin("Podesavanja");
         ImGui::Text("Podesavanje statue");
 
+        ImGui::ColorEdit3("Background color", (float *) &programState->clearColor);
 
         ImGui::DragFloat3("Statue position", (float*)&programState->statuePosition);
         ImGui::DragFloat("Statue scale", &programState->statueScale, 0.05, 0.1, 4.0);
