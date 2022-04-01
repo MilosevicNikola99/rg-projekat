@@ -1145,6 +1145,15 @@ void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         programState->camera.ProcessKeyboard(RIGHT, deltaTime);
 
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+        programState->pointLight2.position+=glm::vec3(0.0f,0.0f,-1.0f) * 4.0f * deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+        programState->pointLight2.position+=glm::vec3(0.0f,0.0f,1.0f)* 4.0f * deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+        programState->pointLight2.position+=glm::vec3(-1.0f,0.0f,0.0f)*4.0f*deltaTime;
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+        programState->pointLight2.position+=glm::vec3(1.0f,0.0f,0.0f)*4.0f*deltaTime;
+
 
 
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)

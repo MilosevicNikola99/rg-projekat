@@ -12,5 +12,6 @@
 5. Efekti: \
     -grayscale na dugme G\
    -blur efekat na dugme B\
-   -color inversion na dugme I 
+   -color inversion na dugme I
+6. Kretanje bloom svetla na UP, DOWN, LEFT and RIGHT
 
