@@ -704,7 +704,7 @@ int main() {
         glBindVertexArray(blendingVAO);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, windowTexture);
-        model = glm::translate(model, programState->statuePosition+glm::vec3(0.0,0.40,0.0));
+        model = glm::translate(model, programState->statuePosition+glm::vec3(0.0,0.37,0.0));
         model = glm::scale(model,glm::vec3(0.3,0.75,0.3));
         b2Shader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -854,7 +854,7 @@ int main() {
         shaderBloomFinal.setInt("ind", ind);
         renderQuad1();
 
-        std::cout << "bloom: " << (bloom ? "on" : "off") << "| exposure: " << exposure << std::endl;
+
 
 
         if (programState->ImGuiEnabled)
